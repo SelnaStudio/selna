@@ -861,8 +861,16 @@
   var track = document.getElementById('hacemosTrack');
   if (track) {
     var cards = track.querySelectorAll('.card');
+    var realCount = cards.length;
     var dotsWrap = document.getElementById('hacemosDots');
     var hacemosTimer = null, resumeTimer = null;
+    /* copia identica de la primera tarjeta al final: asi la vuelta
+       del ultimo al primero sigue deslizando hacia adelante en vez
+       de recular por toda la fila; el salto real ocurre ya sobre la
+       copia (identica) y no se nota */
+    var clone = cards[0].cloneNode(true);
+    clone.setAttribute('aria-hidden', 'true');
+    track.appendChild(clone);
     cards.forEach(function(_, i){
       var b = document.createElement('button');
       b.type = 'button';
@@ -872,22 +880,19 @@
       dotsWrap.appendChild(b);
     });
     function cardStep(){ return track.clientWidth; }
-    function currentIndex(){ return Math.round(track.scrollLeft / cardStep()); }
+    function currentIndex(){
+      var idx = Math.round(track.scrollLeft / cardStep());
+      return idx >= realCount ? 0 : idx;
+    }
     function updateDots(){
       var idx = currentIndex();
       dotsWrap.querySelectorAll('button').forEach(function(b, i){ b.classList.toggle('active', i === idx); });
     }
     var slideAnim = null;
-    function goToCard(i, animate){
-      var wrapped = i >= cards.length || i < 0;
-      i = ((i % cards.length) + cards.length) % cards.length;
-      var target = i * cardStep();
+    function animateScrollTo(target, onDone){
       if (slideAnim) { cancelAnimationFrame(slideAnim); slideAnim = null; }
-      /* al dar la vuelta del ultimo al primero, salto directo: animar
-         hacia atras por toda la fila se ve como si se rompiera */
-      if (animate === false || wrapped) { track.scrollLeft = target; updateDots(); return; }
       var start = track.scrollLeft, dist = target - start, t0 = null, dur = 600;
-      if (Math.abs(dist) < 1) { track.scrollLeft = target; updateDots(); return; }
+      if (Math.abs(dist) < 1) { track.scrollLeft = target; updateDots(); if (onDone) onDone(); return; }
       /* con scroll-snap activo el navegador reencuadra el scrollLeft
          en cada frame y la animacion no se llega a ver: se apaga
          mientras dura el tween propio, se repone al terminar */
@@ -904,9 +909,31 @@
           slideAnim = null;
           track.style.scrollSnapType = '';
           updateDots();
+          if (onDone) onDone();
         }
       }
       slideAnim = requestAnimationFrame(step);
+    }
+    function goToCard(i, animate){
+      if (animate === false){
+        track.scrollLeft = (((i % realCount) + realCount) % realCount) * cardStep();
+        updateDots();
+        return;
+      }
+      if (i >= realCount) {
+        /* de la ultima a la primera: sigue deslizando hacia la copia
+           y de ahi salta sin animar al real, de forma invisible */
+        animateScrollTo(realCount * cardStep(), function(){
+          track.style.scrollSnapType = 'none';
+          track.scrollLeft = 0;
+          void track.offsetWidth;
+          track.style.scrollSnapType = '';
+          updateDots();
+        });
+        return;
+      }
+      var idx = ((i % realCount) + realCount) % realCount;
+      animateScrollTo(idx * cardStep());
     }
     function stopAuto(){
       clearInterval(hacemosTimer);
@@ -929,7 +956,8 @@
       updateDots(); /* en vivo: el punto activo sigue al dedo mientras desliza */
       clearTimeout(scrollTimer);
       scrollTimer = setTimeout(function(){
-        /* red de seguridad: si el swipe nativo lo dejo a medias, lo ajusta */
+        /* red de seguridad: si el swipe nativo lo dejo a medias (o
+           sobre la copia), lo ajusta a la tarjeta real mas cercana */
         if (!slideAnim && !isDown) {
           var idx = currentIndex(), snapTarget = idx * cardStep();
           if (Math.abs(track.scrollLeft - snapTarget) > 2) { track.scrollLeft = snapTarget; }
