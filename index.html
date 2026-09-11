@@ -427,7 +427,7 @@
   @media (max-width:640px){ .img-band{height:190px;} .img-band + .wrap{margin-top:44px;} }
   .carousel{position:relative;}
   .carousel-track{
-    display:flex; gap:0; overflow-x:auto; scroll-snap-type:x proximity;
+    display:flex; gap:0; overflow-x:auto; scroll-snap-type:x mandatory;
     -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none;
     border-top:1px solid var(--linea); border-left:1px solid var(--linea); border-right:1px solid var(--linea);
     border-radius:16px; cursor:grab;
@@ -732,7 +732,7 @@
     <div class="atencion-grid" data-reveal>
       <div class="atencion-card">
         <h3>En línea</h3>
-        <p>Todo el proceso por WhatsApp y videollamada.</p>
+        <p>Todo el proceso en línea.</p>
         <div class="city-pins">
           <span class="city-pin"><span class="dotp"></span>Cualquier ciudad de México</span>
         </div>
@@ -872,14 +872,29 @@
       dotsWrap.appendChild(b);
     });
     function cardStep(){ return track.clientWidth; }
-    function goToCard(i){
-      i = ((i % cards.length) + cards.length) % cards.length;
-      track.scrollLeft = i * cardStep();
-    }
     function currentIndex(){ return Math.round(track.scrollLeft / cardStep()); }
     function updateDots(){
       var idx = currentIndex();
       dotsWrap.querySelectorAll('button').forEach(function(b, i){ b.classList.toggle('active', i === idx); });
+    }
+    var slideAnim = null;
+    function goToCard(i, animate){
+      i = ((i % cards.length) + cards.length) % cards.length;
+      var target = i * cardStep();
+      if (slideAnim) cancelAnimationFrame(slideAnim);
+      if (animate === false) { track.scrollLeft = target; updateDots(); return; }
+      var start = track.scrollLeft, dist = target - start, t0 = null, dur = 550;
+      if (Math.abs(dist) < 1) { track.scrollLeft = target; updateDots(); return; }
+      function step(ts){
+        if (t0 === null) t0 = ts;
+        var p = Math.min(1, (ts - t0) / dur);
+        var eased = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+        track.scrollLeft = start + dist * eased;
+        updateDots();
+        if (p < 1) { slideAnim = requestAnimationFrame(step); }
+        else { track.scrollLeft = target; slideAnim = null; updateDots(); }
+      }
+      slideAnim = requestAnimationFrame(step);
     }
     function resetTimer(){
       clearInterval(hacemosTimer);
@@ -888,7 +903,14 @@
     var scrollTimer;
     track.addEventListener('scroll', function(){
       clearTimeout(scrollTimer);
-      scrollTimer = setTimeout(function(){ updateDots(); }, 90);
+      scrollTimer = setTimeout(function(){
+        updateDots();
+        /* red de seguridad: si el swipe nativo lo dejo a medias, lo ajusta */
+        if (!slideAnim && !isDown) {
+          var idx = currentIndex(), snapTarget = idx * cardStep();
+          if (Math.abs(track.scrollLeft - snapTarget) > 2) { track.scrollLeft = snapTarget; }
+        }
+      }, 120);
     }, { passive: true });
 
     /* arrastrar con mouse en escritorio */
