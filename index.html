@@ -862,13 +862,13 @@
   if (track) {
     var cards = track.querySelectorAll('.card');
     var dotsWrap = document.getElementById('hacemosDots');
-    var hacemosTimer;
+    var hacemosTimer = null, resumeTimer = null;
     cards.forEach(function(_, i){
       var b = document.createElement('button');
       b.type = 'button';
       b.setAttribute('aria-label', 'Ir a la opcion ' + (i + 1));
       if (i === 0) b.classList.add('active');
-      b.addEventListener('click', function(){ goToCard(i); resetTimer(); });
+      b.addEventListener('click', function(){ goToCard(i); pauseThenResume(); });
       dotsWrap.appendChild(b);
     });
     function cardStep(){ return track.clientWidth; }
@@ -879,11 +879,14 @@
     }
     var slideAnim = null;
     function goToCard(i, animate){
+      var wrapped = i >= cards.length || i < 0;
       i = ((i % cards.length) + cards.length) % cards.length;
       var target = i * cardStep();
-      if (slideAnim) cancelAnimationFrame(slideAnim);
-      if (animate === false) { track.scrollLeft = target; updateDots(); return; }
-      var start = track.scrollLeft, dist = target - start, t0 = null, dur = 550;
+      if (slideAnim) { cancelAnimationFrame(slideAnim); slideAnim = null; }
+      /* al dar la vuelta del ultimo al primero, salto directo: animar
+         hacia atras por toda la fila se ve como si se rompiera */
+      if (animate === false || wrapped) { track.scrollLeft = target; updateDots(); return; }
+      var start = track.scrollLeft, dist = target - start, t0 = null, dur = 600;
       if (Math.abs(dist) < 1) { track.scrollLeft = target; updateDots(); return; }
       function step(ts){
         if (t0 === null) t0 = ts;
@@ -896,9 +899,21 @@
       }
       slideAnim = requestAnimationFrame(step);
     }
-    function resetTimer(){
+    function stopAuto(){
       clearInterval(hacemosTimer);
+      hacemosTimer = null;
+    }
+    function startAuto(){
+      stopAuto();
       hacemosTimer = setInterval(function(){ goToCard(currentIndex() + 1); }, 2000);
+    }
+    /* el usuario esta tocando el carrusel: se detiene el avance
+       automatico y no vuelve a empezar hasta 4s despues de que
+       suelte / deje de interactuar */
+    function pauseThenResume(){
+      stopAuto();
+      clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(startAuto, 4000);
     }
     var scrollTimer;
     track.addEventListener('scroll', function(){
@@ -918,21 +933,24 @@
     track.addEventListener('mousedown', function(e){
       isDown = true; track.classList.add('dragging');
       startX = e.pageX; startScroll = track.scrollLeft;
+      pauseThenResume();
     });
     window.addEventListener('mouseup', function(){
       if (!isDown) return;
       isDown = false; track.classList.remove('dragging');
       goToCard(currentIndex());
-      resetTimer();
+      pauseThenResume();
     });
     window.addEventListener('mousemove', function(e){
       if (!isDown) return;
       e.preventDefault();
       track.scrollLeft = startScroll - (e.pageX - startX);
     });
-    track.addEventListener('touchend', resetTimer, { passive: true });
+    track.addEventListener('touchstart', pauseThenResume, { passive: true });
+    track.addEventListener('touchend', pauseThenResume, { passive: true });
+    track.addEventListener('wheel', pauseThenResume, { passive: true });
 
-    resetTimer();
+    startAuto();
   }
 })();
 </script>
