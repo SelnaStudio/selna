@@ -888,6 +888,10 @@
       if (animate === false || wrapped) { track.scrollLeft = target; updateDots(); return; }
       var start = track.scrollLeft, dist = target - start, t0 = null, dur = 600;
       if (Math.abs(dist) < 1) { track.scrollLeft = target; updateDots(); return; }
+      /* con scroll-snap activo el navegador reencuadra el scrollLeft
+         en cada frame y la animacion no se llega a ver: se apaga
+         mientras dura el tween propio, se repone al terminar */
+      track.style.scrollSnapType = 'none';
       function step(ts){
         if (t0 === null) t0 = ts;
         var p = Math.min(1, (ts - t0) / dur);
@@ -895,7 +899,12 @@
         track.scrollLeft = start + dist * eased;
         updateDots();
         if (p < 1) { slideAnim = requestAnimationFrame(step); }
-        else { track.scrollLeft = target; slideAnim = null; updateDots(); }
+        else {
+          track.scrollLeft = target;
+          slideAnim = null;
+          track.style.scrollSnapType = '';
+          updateDots();
+        }
       }
       slideAnim = requestAnimationFrame(step);
     }
@@ -917,9 +926,9 @@
     }
     var scrollTimer;
     track.addEventListener('scroll', function(){
+      updateDots(); /* en vivo: el punto activo sigue al dedo mientras desliza */
       clearTimeout(scrollTimer);
       scrollTimer = setTimeout(function(){
-        updateDots();
         /* red de seguridad: si el swipe nativo lo dejo a medias, lo ajusta */
         if (!slideAnim && !isDown) {
           var idx = currentIndex(), snapTarget = idx * cardStep();
